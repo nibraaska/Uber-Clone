@@ -29,7 +29,7 @@ class DriverLoginActivity : AppCompatActivity() {
         auth = FirebaseAuth.getInstance()
         firebaseAuthListener = FirebaseAuth.AuthStateListener {
             if (it.currentUser != null)
-                startActivity(Intent(this, MapActivity::class.java))
+                startActivity(Intent(this, DriverMapActivity::class.java))
         }
 
         email = findViewById(R.id.email)

@@ -23,10 +23,13 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 
 class CustomerMapActivity : AppCompatActivity(),
     OnMapReadyCallback,
@@ -98,7 +101,7 @@ class CustomerMapActivity : AppCompatActivity(),
     }
 
     private fun getClosestDriver() {
-        val driverLocations = FirebaseDatabase.getInstance().reference.child("driversAvailable")
+        val driverLocations = FirebaseDatabase.getInstance().reference.child("DriversAvailable")
         val geoFire = GeoFire(driverLocations)
         val geoQuery = geoFire.queryAtLocation(GeoLocation(pickUpLocation.latitude, pickUpLocation.longitude), radius)
         geoQuery.removeAllListeners()
@@ -107,6 +110,7 @@ class CustomerMapActivity : AppCompatActivity(),
             override fun onGeoQueryReady() {
                 if (!driverFound){
                     radius++
+                    Log.d("here", "here")
                     getClosestDriver()
                 }
             }
@@ -115,8 +119,20 @@ class CustomerMapActivity : AppCompatActivity(),
                 if (!driverFound) {
                     driverFound = true
                     driverID = key!!
-                    Log.d("here", driverID)
-                    Log.d("here", radius.toString())
+
+
+
+                    val databaseRef = FirebaseDatabase.getInstance().reference
+                        .child("Users")
+                        .child("Drivers")
+                        .child(driverID)
+                    val customerID = FirebaseAuth.getInstance().currentUser?.uid
+
+                    databaseRef.child("customerRideID").setValue(customerID)
+
+                    callUber.text = "Looking for Uber location"
+                    getDriverLocation()
+
                 }
             }
 
@@ -125,6 +141,38 @@ class CustomerMapActivity : AppCompatActivity(),
             override fun onKeyExited(key: String?) {}
 
             override fun onGeoQueryError(error: DatabaseError?) {}
+
+        })
+    }
+
+    private fun getDriverLocation() {
+        callUber.text = "Driver Found"
+        val driverLocationRef = FirebaseDatabase.getInstance().reference
+            .child("DriversWorking")
+            .child(driverID)
+            .child("l")
+        driverLocationRef.addValueEventListener(object: ValueEventListener{
+            override fun onCancelled(p0: DatabaseError) {
+            }
+
+            lateinit var driverMarker: Marker
+            override fun onDataChange(p0: DataSnapshot) {
+                if(p0.exists()){
+                    val map = p0.value as(List<*>)
+                    var locationLat = 0.0
+                    var locationLang = 0.0
+
+                    if (map[0] != null){
+                        locationLat = map[0].toString().toDouble()
+                    }
+
+                    if (map[1] != null){
+                        locationLang = map[1].toString().toDouble()
+                    }
+                    val driverLatLang = LatLng(locationLat, locationLang)
+                    driverMarker = mMap.addMarker(MarkerOptions().position(driverLatLang).title("Driver Location"))
+                }
+            }
 
         })
     }

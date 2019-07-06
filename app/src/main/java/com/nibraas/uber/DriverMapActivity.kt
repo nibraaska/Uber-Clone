@@ -3,9 +3,12 @@ package com.nibraas.uber
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import com.firebase.geofire.GeoFire
+import com.firebase.geofire.GeoLocation
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.api.GoogleApiClient
 import com.google.android.gms.location.LocationListener
@@ -16,6 +19,8 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
 
 class DriverMapActivity : AppCompatActivity(),
                             OnMapReadyCallback,
@@ -92,6 +97,13 @@ class DriverMapActivity : AppCompatActivity(),
 
         mMap.moveCamera(CameraUpdateFactory.newLatLng(latLng))
         mMap.animateCamera(CameraUpdateFactory.zoomTo(11F))
+
+
+        val userID = FirebaseAuth.getInstance().currentUser?.uid
+        val firebaseReference = FirebaseDatabase.getInstance().reference.child("driversAvailable")
+
+        val geoFire = GeoFire(firebaseReference)
+        geoFire.setLocation(userID, GeoLocation(lastLocation.latitude, lastLocation.longitude)) { _, _ -> }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -105,5 +117,14 @@ class DriverMapActivity : AppCompatActivity(),
                 }
             }
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        val userID = FirebaseAuth.getInstance().currentUser?.uid
+        val firebaseReference = FirebaseDatabase.getInstance().reference.child("driversAvailable")
+
+        val geoFire = GeoFire(firebaseReference)
+        geoFire.removeLocation(userID)
     }
 }

@@ -26,7 +26,7 @@ class CustomerLoginActivity : AppCompatActivity() {
         auth = FirebaseAuth.getInstance()
         firebaseAuthListener = FirebaseAuth.AuthStateListener {
             if (it.currentUser != null)
-                startActivity(Intent(this, MapActivity::class.java))
+                startActivity(Intent(this, CustomerMapActivity::class.java))
         }
 
         email = findViewById(R.id.email)

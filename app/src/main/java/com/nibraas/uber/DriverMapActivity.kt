@@ -1,7 +1,10 @@
 package com.nibraas.uber
 
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.location.Location
 import android.os.Bundle
 import android.util.Log
@@ -9,6 +12,7 @@ import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.firebase.geofire.GeoFire
 import com.firebase.geofire.GeoLocation
 import com.google.android.gms.common.ConnectionResult
@@ -20,9 +24,7 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
-import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.Marker
-import com.google.android.gms.maps.model.MarkerOptions
+import com.google.android.gms.maps.model.*
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 
@@ -55,6 +57,10 @@ class DriverMapActivity : AppCompatActivity(),
     private lateinit var assignedCustomerPickupLocationRef: DatabaseReference
     private var assignedCustomerPickupLocationRefListener: ValueEventListener? = null
 
+    private var notLoggingOut = false
+
+    val userID = FirebaseAuth.getInstance().currentUser?.uid
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,6 +71,8 @@ class DriverMapActivity : AppCompatActivity(),
 
         logoutBtn = findViewById(R.id.logout)
         logoutBtn.setOnClickListener {
+            notLoggingOut = true
+            disconnectDriver()
             FirebaseAuth.getInstance().signOut()
             startActivity(Intent(this, MainActivity::class.java))
         }
@@ -125,7 +133,7 @@ class DriverMapActivity : AppCompatActivity(),
                         locationLang = map[1].toString().toDouble()
                     }
                     val driverLatLang = LatLng(locationLat, locationLang)
-                    pickUpMarker = mMap.addMarker(MarkerOptions().position(driverLatLang).title("Pickup Location"))
+                    pickUpMarker = mMap.addMarker(MarkerOptions().position(driverLatLang).title("Pickup Location").icon(bitmapDescriptorFromVector(this@DriverMapActivity, R.mipmap.ic_pickup)))
                 } else {
                     customerID = null
                     pickUpMarker?.remove()
@@ -177,8 +185,6 @@ class DriverMapActivity : AppCompatActivity(),
         mMap.moveCamera(CameraUpdateFactory.newLatLng(latLng))
         mMap.animateCamera(CameraUpdateFactory.zoomTo(11F))
 
-        val userID = FirebaseAuth.getInstance().currentUser?.uid
-
         val refAvailable = FirebaseDatabase.getInstance().reference.child("DriversAvailable")
         val refWorking = FirebaseDatabase.getInstance().reference.child("DriversWorking")
 
@@ -211,12 +217,25 @@ class DriverMapActivity : AppCompatActivity(),
         }
     }
 
-    override fun onStop() {
-        super.onStop()
-        val userID = FirebaseAuth.getInstance().currentUser?.uid
+    private fun disconnectDriver(){
         val firebaseReference = FirebaseDatabase.getInstance().reference.child("driversAvailable")
 
         val geoFire = GeoFire(firebaseReference)
-        geoFire.removeLocation(userID)
+        geoFire.removeLocation(userID) {_, _ -> }
+    }
+    override fun onStop() {
+        super.onStop()
+        if (!notLoggingOut){
+            disconnectDriver()
+        }
+    }
+
+    private fun bitmapDescriptorFromVector(context: Context, vectorResId: Int): BitmapDescriptor? {
+        return ContextCompat.getDrawable(context, vectorResId)?.run {
+            this.setBounds(0, 0, intrinsicWidth, intrinsicHeight)
+            val bitmap = Bitmap.createBitmap(intrinsicWidth, intrinsicHeight, Bitmap.Config.ARGB_8888)
+            draw(Canvas(bitmap))
+            BitmapDescriptorFactory.fromBitmap(bitmap)
+        }
     }
 }

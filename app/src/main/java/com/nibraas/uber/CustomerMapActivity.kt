@@ -1,7 +1,10 @@
 package com.nibraas.uber
 
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.location.Location
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
@@ -9,6 +12,7 @@ import android.util.Log
 import android.widget.Button
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.firebase.geofire.GeoFire
 import com.firebase.geofire.GeoLocation
 import com.firebase.geofire.GeoQuery
@@ -22,12 +26,9 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
-import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.Marker
-import com.google.android.gms.maps.model.MarkerOptions
+import com.google.android.gms.maps.model.*
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
-import kotlinx.android.synthetic.main.activity_main.*
 
 class CustomerMapActivity : AppCompatActivity(),
     OnMapReadyCallback,
@@ -47,7 +48,8 @@ class CustomerMapActivity : AppCompatActivity(),
     private lateinit var locationRequest: LocationRequest
 
     private lateinit var logoutBtn: Button
-    private lateinit var callUber: Button
+    private lateinit var callUberBtn: Button
+    private lateinit var settingsBtn: Button
 
     private lateinit var pickUpLocation: LatLng
 
@@ -77,14 +79,19 @@ class CustomerMapActivity : AppCompatActivity(),
             .findFragmentById(R.id.map) as SupportMapFragment
 
         logoutBtn = findViewById(R.id.logout)
-        callUber = findViewById(R.id.request)
+        callUberBtn = findViewById(R.id.request)
+        settingsBtn = findViewById(R.id.setting)
 
         logoutBtn.setOnClickListener {
             FirebaseAuth.getInstance().signOut()
             startActivity(Intent(this, MainActivity::class.java))
         }
 
-        callUber.setOnClickListener {
+        settingsBtn.setOnClickListener {
+            startActivity(Intent(this, CustomerSettingsActivity::class.java))
+        }
+
+        callUberBtn.setOnClickListener {
             when (requestBol){
                 false -> {
 
@@ -97,9 +104,9 @@ class CustomerMapActivity : AppCompatActivity(),
                         GeoLocation(lastLocation.latitude, lastLocation.longitude)) { _, _ -> }
 
                     pickUpLocation = LatLng(lastLocation.latitude, lastLocation.longitude)
-                    pickupMarker = mMap.addMarker(MarkerOptions().position(pickUpLocation).title("Pick up here"))
+                    pickupMarker = mMap.addMarker(MarkerOptions().position(pickUpLocation).title("Pick up here").icon(bitmapDescriptorFromVector(this, R.mipmap.ic_pickup)))
 
-                    callUber.text = "Getting your driver"
+                    callUberBtn.text = "Getting your driver"
 
                     getClosestDriver()
                 }
@@ -127,7 +134,7 @@ class CustomerMapActivity : AppCompatActivity(),
                     pickupMarker?.remove()
                     driverMarker?.remove()
 
-                    callUber.text = "Call Uber"
+                    callUberBtn.text = "Call Uber"
                 }
             }
 
@@ -170,7 +177,7 @@ class CustomerMapActivity : AppCompatActivity(),
 
                     databaseRef.child("customerRideID").setValue(customerID)
 
-                    callUber.text = "Looking for Uber location"
+                    callUberBtn.text = "Looking for Uber location"
                     getDriverLocation()
 
                 }
@@ -186,7 +193,7 @@ class CustomerMapActivity : AppCompatActivity(),
     }
 
     private fun getDriverLocation() {
-        callUber.text = "Driver Found"
+        callUberBtn.text = "Driver Found"
         driverLocationRef = FirebaseDatabase.getInstance().reference
             .child("DriversWorking")
             .child(driverID)
@@ -210,10 +217,10 @@ class CustomerMapActivity : AppCompatActivity(),
                     }
                     val driverLatLang = LatLng(locationLat, locationLang)
                     driverMarker = if (driverMarker == null){
-                        mMap.addMarker(MarkerOptions().position(driverLatLang).title("Driver Location"))
+                        mMap.addMarker(MarkerOptions().position(driverLatLang).title("Driver Location").icon(bitmapDescriptorFromVector(this@CustomerMapActivity, R.mipmap.ic_car)))
                     } else {
                         driverMarker?.remove()
-                        mMap.addMarker(MarkerOptions().position(driverLatLang).title("Driver Location"))
+                        mMap.addMarker(MarkerOptions().position(driverLatLang).title("Driver Location").icon(bitmapDescriptorFromVector(this@CustomerMapActivity, R.mipmap.ic_car)))
                     }
 
 
@@ -228,9 +235,9 @@ class CustomerMapActivity : AppCompatActivity(),
                     val distance = loc1.distanceTo(loc2)
 
                     if (distance < 100){
-                        callUber.text = "Driver is here"
+                        callUberBtn.text = "Driver is here"
                     } else {
-                        callUber.text = distance.toString()
+                        callUberBtn.text = distance.toString()
                     }
                 }
             }
@@ -290,6 +297,15 @@ class CustomerMapActivity : AppCompatActivity(),
                     Toast.makeText(this, "Please provide the permission for map", Toast.LENGTH_LONG).show()
                 }
             }
+        }
+    }
+
+    private fun bitmapDescriptorFromVector(context: Context, vectorResId: Int): BitmapDescriptor? {
+        return ContextCompat.getDrawable(context, vectorResId)?.run {
+            this.setBounds(0, 0, intrinsicWidth, intrinsicHeight)
+            val bitmap = Bitmap.createBitmap(intrinsicWidth, intrinsicHeight, Bitmap.Config.ARGB_8888)
+            draw(Canvas(bitmap))
+            BitmapDescriptorFactory.fromBitmap(bitmap)
         }
     }
 }

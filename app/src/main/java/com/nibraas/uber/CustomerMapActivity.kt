@@ -26,10 +26,8 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
+import com.google.firebase.database.*
+import kotlinx.android.synthetic.main.activity_main.*
 
 class CustomerMapActivity : AppCompatActivity(),
     OnMapReadyCallback,
@@ -61,6 +59,15 @@ class CustomerMapActivity : AppCompatActivity(),
     private var radius: Double = 1.0
     lateinit var mapFragment: SupportMapFragment
 
+    var driverMarker: Marker? = null
+    private var pickupMarker: Marker? = null
+
+    private var requestBol = false
+
+    private lateinit var geoQuery: GeoQuery
+    private lateinit var driverLocationRef: DatabaseReference
+    private lateinit var driverLocationRefListener: ValueEventListener
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,18 +85,51 @@ class CustomerMapActivity : AppCompatActivity(),
         }
 
         callUber.setOnClickListener {
-            val userID = FirebaseAuth.getInstance().currentUser?.uid
-            val databaseReference = FirebaseDatabase.getInstance().reference.child("customerRequests")
+            when (requestBol){
+                false -> {
 
-            GeoFire(databaseReference).setLocation(userID,
-                GeoLocation(lastLocation.latitude, lastLocation.longitude)) { _, _ -> }
+                    requestBol = true
 
-            pickUpLocation = LatLng(lastLocation.latitude, lastLocation.longitude)
-            mMap.addMarker(MarkerOptions().position(pickUpLocation).title("Pick up here"))
+                    val userID = FirebaseAuth.getInstance().currentUser?.uid
+                    val databaseReference = FirebaseDatabase.getInstance().reference.child("customerRequests")
 
-            callUber.text = "Getting your driver"
+                    GeoFire(databaseReference).setLocation(userID,
+                        GeoLocation(lastLocation.latitude, lastLocation.longitude)) { _, _ -> }
 
-            getClosestDriver()
+                    pickUpLocation = LatLng(lastLocation.latitude, lastLocation.longitude)
+                    pickupMarker = mMap.addMarker(MarkerOptions().position(pickUpLocation).title("Pick up here"))
+
+                    callUber.text = "Getting your driver"
+
+                    getClosestDriver()
+                }
+                true -> {
+                    requestBol = false
+
+                    geoQuery.removeAllListeners()
+                    driverLocationRef.removeEventListener(driverLocationRefListener)
+
+                    val userID = FirebaseAuth.getInstance().currentUser?.uid
+                    val databaseReference = FirebaseDatabase.getInstance().reference.child("customerRequests")
+                    GeoFire(databaseReference).removeLocation(userID) {_, _ -> }
+
+                    if (driverID.isNotEmpty()){
+                        val databaseRef = FirebaseDatabase.getInstance().reference
+                            .child("Users")
+                            .child("Drivers")
+                            .child(driverID)
+                        databaseRef.setValue(true)
+                        driverID = ""
+                    }
+                    driverFound = false
+                    radius = 1.0
+
+                    pickupMarker?.remove()
+                    driverMarker?.remove()
+
+                    callUber.text = "Call Uber"
+                }
+            }
 
         }
 
@@ -103,7 +143,7 @@ class CustomerMapActivity : AppCompatActivity(),
     private fun getClosestDriver() {
         val driverLocations = FirebaseDatabase.getInstance().reference.child("DriversAvailable")
         val geoFire = GeoFire(driverLocations)
-        val geoQuery = geoFire.queryAtLocation(GeoLocation(pickUpLocation.latitude, pickUpLocation.longitude), radius)
+        geoQuery = geoFire.queryAtLocation(GeoLocation(pickUpLocation.latitude, pickUpLocation.longitude), radius)
         geoQuery.removeAllListeners()
 
         geoQuery.addGeoQueryEventListener(object : GeoQueryEventListener{
@@ -116,7 +156,7 @@ class CustomerMapActivity : AppCompatActivity(),
             }
 
             override fun onKeyEntered(key: String?, location: GeoLocation?) {
-                if (!driverFound) {
+                if (!driverFound && requestBol) {
                     driverFound = true
                     driverID = key!!
 
@@ -147,17 +187,16 @@ class CustomerMapActivity : AppCompatActivity(),
 
     private fun getDriverLocation() {
         callUber.text = "Driver Found"
-        val driverLocationRef = FirebaseDatabase.getInstance().reference
+        driverLocationRef = FirebaseDatabase.getInstance().reference
             .child("DriversWorking")
             .child(driverID)
             .child("l")
-        driverLocationRef.addValueEventListener(object: ValueEventListener{
+        driverLocationRefListener = driverLocationRef.addValueEventListener(object: ValueEventListener{
             override fun onCancelled(p0: DatabaseError) {
             }
 
-            lateinit var driverMarker: Marker
             override fun onDataChange(p0: DataSnapshot) {
-                if(p0.exists()){
+                if(p0.exists() && requestBol){
                     val map = p0.value as(List<*>)
                     var locationLat = 0.0
                     var locationLang = 0.0
@@ -170,7 +209,29 @@ class CustomerMapActivity : AppCompatActivity(),
                         locationLang = map[1].toString().toDouble()
                     }
                     val driverLatLang = LatLng(locationLat, locationLang)
-                    driverMarker = mMap.addMarker(MarkerOptions().position(driverLatLang).title("Driver Location"))
+                    driverMarker = if (driverMarker == null){
+                        mMap.addMarker(MarkerOptions().position(driverLatLang).title("Driver Location"))
+                    } else {
+                        driverMarker?.remove()
+                        mMap.addMarker(MarkerOptions().position(driverLatLang).title("Driver Location"))
+                    }
+
+
+                    val loc1 = Location("")
+                    loc1.longitude = pickUpLocation.longitude
+                    loc1.latitude = pickUpLocation.latitude
+
+                    val loc2 = Location("")
+                    loc2.longitude = driverLatLang.longitude
+                    loc2.latitude = driverLatLang.latitude
+
+                    val distance = loc1.distanceTo(loc2)
+
+                    if (distance < 100){
+                        callUber.text = "Driver is here"
+                    } else {
+                        callUber.text = distance.toString()
+                    }
                 }
             }
 

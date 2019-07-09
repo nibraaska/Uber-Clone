@@ -21,12 +21,10 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
+import com.google.firebase.database.*
 
 class DriverMapActivity : AppCompatActivity(),
                             OnMapReadyCallback,
@@ -52,6 +50,10 @@ class DriverMapActivity : AppCompatActivity(),
     lateinit var mapFragment: SupportMapFragment
 
     private var customerID: String? = null
+
+    private var pickUpMarker: Marker? = null
+    private lateinit var assignedCustomerPickupLocationRef: DatabaseReference
+    private var assignedCustomerPickupLocationRefListener: ValueEventListener? = null
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -96,20 +98,21 @@ class DriverMapActivity : AppCompatActivity(),
     }
 
     private fun getAssignedCustomerPickUpLocation() {
-        val pickUpLocation = customerID?.let {
-            FirebaseDatabase.getInstance().reference
-                .child("customerRequests")
-                .child(it)
-                .child("l")
-        }
+        assignedCustomerPickupLocationRef =
+            customerID?.let {
+                FirebaseDatabase.getInstance().reference
+                    .child("customerRequests")
+                    .child(it)
+                    .child("l")
+            }!!
 
-        pickUpLocation?.addValueEventListener(object : ValueEventListener{
+        assignedCustomerPickupLocationRefListener = assignedCustomerPickupLocationRef.addValueEventListener(object : ValueEventListener{
             override fun onCancelled(p0: DatabaseError) {
 
             }
 
             override fun onDataChange(p0: DataSnapshot) {
-                if (p0.exists()) {
+                if (p0.exists() && customerID!=null) {
                     val map = p0.value as(List<*>)
                     var locationLat = 0.0
                     var locationLang = 0.0
@@ -122,7 +125,13 @@ class DriverMapActivity : AppCompatActivity(),
                         locationLang = map[1].toString().toDouble()
                     }
                     val driverLatLang = LatLng(locationLat, locationLang)
-                    mMap.addMarker(MarkerOptions().position(driverLatLang).title("Pickup Location"))
+                    pickUpMarker = mMap.addMarker(MarkerOptions().position(driverLatLang).title("Pickup Location"))
+                } else {
+                    customerID = null
+                    pickUpMarker?.remove()
+                    if (assignedCustomerPickupLocationRefListener != null) {
+                        assignedCustomerPickupLocationRef.removeEventListener(assignedCustomerPickupLocationRefListener!!)
+                    }
                 }
             }
         })

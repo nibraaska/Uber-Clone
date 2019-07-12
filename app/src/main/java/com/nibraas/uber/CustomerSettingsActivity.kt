@@ -1,11 +1,24 @@
 package com.nibraas.uber
 
+import android.app.Activity
+import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.provider.MediaStore
+import android.util.Log
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
+import com.bumptech.glide.Glide
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
+import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageReference
+import com.google.firebase.storage.UploadTask
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 
 class CustomerSettingsActivity : AppCompatActivity() {
 
@@ -20,6 +33,10 @@ class CustomerSettingsActivity : AppCompatActivity() {
     private lateinit var userID: String
     private lateinit var stringName: String
     private lateinit var stringPhone: String
+    private lateinit var stringProfileImage: String
+
+    private lateinit var profileImage: ImageView
+    private var resultUri: Uri? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,6 +46,7 @@ class CustomerSettingsActivity : AppCompatActivity() {
         phone = findViewById(R.id.phoneNumber)
         backBtn = findViewById(R.id.back)
         confirmBtn = findViewById(R.id.confirm)
+        profileImage = findViewById(R.id.profileImage)
 
         auth = FirebaseAuth.getInstance()
         userID = auth.currentUser?.uid ?: ""
@@ -38,6 +56,12 @@ class CustomerSettingsActivity : AppCompatActivity() {
             .child(userID)
 
         getUserInfo()
+
+        profileImage.setOnClickListener {
+            val intent = Intent(Intent.ACTION_PICK)
+            intent.type = "image/*"
+            startActivityForResult(intent, 1)
+        }
 
         confirmBtn.setOnClickListener {
             saveUserInformation()
@@ -64,6 +88,10 @@ class CustomerSettingsActivity : AppCompatActivity() {
                         stringPhone = map["phone"].toString()
                         phone.setText(stringPhone)
                     }
+                    if (map["profileImage"]!=null){
+                        stringProfileImage = map["profileImage"].toString()
+                        Glide.with(application).load(stringProfileImage).into(profileImage)
+                    }
                 }
             }
 
@@ -80,6 +108,43 @@ class CustomerSettingsActivity : AppCompatActivity() {
         userInfoMap["phone"] = stringPhone
         databaseReference.updateChildren(userInfoMap)
 
+
+        when {
+            resultUri != null -> {
+                val filePath = FirebaseStorage.getInstance().getReference("profile_images").child(userID)
+                val bitmap = MediaStore.Images.Media.getBitmap(application.contentResolver, resultUri)
+                val boas = ByteArrayOutputStream()
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 20, boas)
+
+                val data = boas.toByteArray()
+                val uploadTask = filePath.putBytes(data)
+
+
+                uploadTask.addOnSuccessListener {
+                    filePath.downloadUrl.addOnSuccessListener {
+                        val newImage: HashMap<String, Any> = HashMap()
+                        newImage["profileImage"] = it.toString()
+                        databaseReference.updateChildren(newImage)
+                        finish()
+                    }
+                }
+
+                uploadTask.addOnFailureListener {
+                    finish()
+                }
+            }
+            else -> finish()
+        }
+
         finish()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 1 && resultCode == Activity.RESULT_OK){
+            val uri = data?.data
+            resultUri = uri!!
+            profileImage.setImageURI(resultUri)
+        }
     }
 }
